@@ -1,7 +1,7 @@
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
-public class MainClass {
+public class MainClass{
     public static void main(String [] args) throws InterruptedException {
         LinkedBlockingQueue<Runnable> queue = new LinkedBlockingQueue<Runnable>(); // coda nella prima sala, illimitata
         //ReentrantLock l=new ReentrantLock();
@@ -10,6 +10,7 @@ public class MainClass {
         int p = scanner.nextInt();
         System.out.println("Inserire capienza coda seconda sala");
         int k = scanner.nextInt();
+        scanner.close();
         Ufficio ufficio = new Ufficio(queue, k);
         ufficio.entrata(p); //faccio entare le persone nella prima sala
         //queue.peek() lo prende dalla coda ma non lo elimina. Consigliato
