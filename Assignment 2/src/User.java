@@ -7,7 +7,7 @@ public class User implements Runnable{
     public void run(){
         try{
             System.out.println("Utente " + number + " allo sportello.");
-            Thread.sleep((long)Math.round(Math.random()*20000));
+            Thread.sleep((long)Math.round(Math.random()*10000)+1000); // ogni utente fa operazioni da qualche secondo (max circa 11 secondi,min 1 secondo)
             System.out.println("Utente " + number + " servito.");
         }
         catch(InterruptedException e){

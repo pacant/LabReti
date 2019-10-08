@@ -1,14 +1,12 @@
 import java.util.*;
 import java.util.concurrent.*;
-
-
 public class Ufficio{
     private ThreadPoolExecutor executor;
-    private BlockingQueue<Runnable> queue;
+    private BlockingQueue<Runnable> queue; //la coda della prima sala
     public Ufficio(LinkedBlockingQueue<Runnable> queue,int k){
         this.queue=queue;
-        executor= new ThreadPoolExecutor(4, 4, 200, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(k)); //la coda dovrebbe essere di k
-        executor.prestartCoreThread();
+        executor= new ThreadPoolExecutor(4, 4, 200, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(k)); //thread pool con coda limitata a k
+        executor.prestartCoreThread(); //apre gli sportelli subito
     }
     public void entrata(int p) throws InterruptedException{
        try {
@@ -24,12 +22,10 @@ public class Ufficio{
     }
     public void executeTask() throws RejectedExecutionException{
         try {
-            while(!queue.isEmpty()) {
-                User utente = null;
-                utente = (User)queue.peek();
-                executor.execute(utente);
-                queue.remove();
-            }
+            //queue.peek() lo prende dalla coda ma non lo elimina. Consigliato al posto di take()
+            User utente = (User)queue.peek();
+            executor.execute(utente);
+            queue.remove();
         }
         catch(RejectedExecutionException e){
             return;
