@@ -1,3 +1,4 @@
 public class Global {
-    static String filename= "esempio";
+    static String filename;
+    static boolean up=true;
 }

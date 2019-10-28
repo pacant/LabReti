@@ -4,37 +4,35 @@ import java.util.concurrent.locks.*;
 
 public class MainClass {
     static public void main(String []args) throws InterruptedException {
-        Scanner scanner= new Scanner(System.in);
-        Global.filename=scanner.nextLine();
-        //List<String> filelist =Collections.synchronizedList(new LinkedList<String>());
-        LinkedList<String> filelist=new LinkedList<String>();
+        // MainClass filename k
+        // filename (directory di partenza
+        // k (numero di consumer)
+        if(args.length!=2) throw new IllegalArgumentException("Passare filename e numero di consumer");
+
+        Global.filename=args[0];
+
+        LinkedList<String> filelist=new LinkedList<String>(); // Linkedlist che contiene i file
+
         Lock lock=new ReentrantLock();
-        Condition notEmpty= lock.newCondition();
+        Condition notEmpty= lock.newCondition(); //inizializzo lock e condition
+        Lock lockup=new ReentrantLock();
 
 
-        Producer producer=new Producer(filelist,lock,notEmpty);
+        Producer producer=new Producer(filelist,lock,notEmpty,lockup);
         Thread threadproducer=new Thread(producer);
 
+        int k= Integer.valueOf(args[1]);
 
-        int k=scanner.nextInt();
-        scanner.close();
-        Thread [] consumatori=new Thread[k];
-        threadproducer.start();
+
+        threadproducer.start(); //faccio partire il producer
+
         Thread threadconsumer;
-        for(int i = 0; i < k; i++){
-            Consumer consumer=new Consumer(filelist,lock,notEmpty);
+        for(int i = 0; i < k; i++){ //faccio partire i consumer
+            Consumer consumer=new Consumer(filelist,lock,notEmpty,lockup);
             threadconsumer=new Thread(consumer);
-            consumatori[i]=threadconsumer;
             threadconsumer.start();
         }
         threadproducer.join();
-        System.out.println("Finito");
-        for(int i=0;i<k;i++){
-            System.out.println("Interrompo " + consumatori[i].getName());
-            consumatori[i].interrupt();
-        }
-
-
-
+        System.out.println("Producer terminato, i consumer finiscono di svuotare la coda.");
     }
 }
