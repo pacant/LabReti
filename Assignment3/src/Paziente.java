@@ -70,7 +70,7 @@ public class Paziente implements Runnable{
                     }
                     break;
                 case GIALLO:
-                        lockred.lock(); //QUESTA è UNA READLOCK
+                        lockred.lock();
                         while(Ambulatorio.redwaiting!=0){
                           // System.out.println("Codice giallo in attesa, ci sono codici rossi in fila");
                             waitred.await();
@@ -78,12 +78,14 @@ public class Paziente implements Runnable{
                         lockred.unlock();
                     for (int i = 0; i < k; i++) {
                         lock.lock();
+
                         while (Ambulatorio.full||Ambulatorio.medici[indice]) {
                            //System.out.println("Codice giallo in attesa del medico " + ++indice);
                             //--indice;
                             occupato.await();
                         }
                         System.out.println("Codice giallo assegnato al medico " + ++indice);
+
                         --indice;
                         Ambulatorio.medici[indice] = true;
                         lock.unlock();
@@ -99,7 +101,7 @@ public class Paziente implements Runnable{
                     break;
                 case BIANCO:
                     int j;
-                    lockred.lock(); //QUESTA è UNA READLOCK
+                    lockred.lock();
                     while(Ambulatorio.redwaiting!=0){
                        // System.out.println("Codice bianco in attesa, ci sono codici rossi in fila");
                         waitred.await();

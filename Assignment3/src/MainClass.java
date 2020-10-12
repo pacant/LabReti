@@ -18,10 +18,12 @@ public class MainClass {
         final Condition occupato=lock.newCondition();
         final Lock lockred=new ReentrantLock();
         //final Lock readred= lockred.readLock();
-        //final Lock writered= lockred.readLock();
+        //final Lock writered= lockred.writeLock();
         final Condition waitred=lockred.newCondition();
 
         Thread [] arraythread=new Thread[numpazienti]; //creo un array di thread
+
+
 
         for (int i = 0; i < Ambulatorio.medici.length; i++) {
             Ambulatorio.medici[i] = false;  //inizializzo l'array dei medici a false (medici tutti non occupati)

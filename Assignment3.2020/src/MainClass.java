@@ -7,11 +7,11 @@ public class MainClass {
         System.out.println("Avvio del programma...");
         System.out.println("Inserire il numero di professori");
         int num_professori = scanner.nextInt();
-        System.out.println("Inserire il numero di tirocinanti");
-        int num_tirocinanti = scanner.nextInt();
+        System.out.println("Inserire il numero di tesisti");
+        int num_tesisti= scanner.nextInt();
         System.out.println("Inserire il numero di studenti");
         int num_studenti = scanner.nextInt();
-        int num_utilizzatori=num_professori+num_tirocinanti+num_studenti;
+        int num_utilizzatori=num_professori+num_tesisti+num_studenti;
         int j=0;
 
         final Lock lock=new ReentrantLock();
@@ -25,18 +25,44 @@ public class MainClass {
             Laboratorio.computer[i] = false;  //inizializzo l'array dei computer a false (computer tutti non occupati)
         }
 
-        for(int i=0; i<num_professori; i++){
-            //TODO: creo un thread per ogni professore e lo metto nell'array di thread
+        for(int i=0;i<Laboratorio.tesistiwaiting.length;i++){
+            Laboratorio.tesistiwaiting[i]=0;
         }
 
-        for(int i=0; i<num_tirocinanti; i++){
-            //TODO:creo un thread per ogni tirocinante e lo metto nell'array di thread
+        for(int i=0; i<num_professori; i++){
+            Utente professore=new Utente(Ruolo.PROFESSORE,lock,occupato,lockprof,waitprof);
+            Thread threadprof=new Thread(professore);
+            arraythread[j]=threadprof;
+            j++;
+            threadprof.start();
+        }
+
+        for(int i=0; i<num_tesisti; i++){
+            int indice =(int) (Math.random() * 20);
+            Utente tesista=new Utente(Ruolo.TESISTA,lock,occupato,lockprof,waitprof,indice);
+            Thread threadtesista=new Thread(tesista);
+            arraythread[j]=threadtesista;
+            j++;
+            threadtesista.start();
         }
 
         for(int i=0; i<num_studenti; i++){
-            //TODO:creo un thread per ogni studente e lo metto nell'array di thread
+            Utente studente=new Utente(Ruolo.STUDENTE,lock,occupato,lockprof,waitprof);
+            Thread threadstudente=new Thread(studente);
+            arraythread[j]=threadstudente;
+            j++;
+            threadstudente.start();
         }
+        for(int i= 0; i<num_utilizzatori; i++){
+            try {
+                arraythread[i].join();
+            }
+            catch(InterruptedException e){
+                e.printStackTrace();
+                return;
+            }
+        }
+        System.out.println("Finito");
 
-        //TODO:qui faccio una join per ogni thread nell'array
     }
 }
