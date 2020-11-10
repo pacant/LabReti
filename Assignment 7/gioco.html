@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Test your reaction</title>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <style>
+      h1{
+        color:goldenrod;
+        text-align: center;
+      }
+      #shape{
+        width:200px;
+        height:200px;
+        display:none;
+        position: relative;
+        border: solid;
+      }
+      .bold{
+        font-weight: bold;
+      }
+      body{
+        background-color: darkslategrey;
+      }
+      #sottotitolo{
+        color:white;
+        text-align: center;
+      }
+      #time{
+        color:coral;
+        text-align:center;
+      }
+      #end{
+        color:crimson;
+        text-align: center;
+        margin-top:180px;
+        font-size: 80px;
+      }
+      #win{
+        color:chartreuse;
+        text-align: center;
+        margin-top:180px;
+        font-size: 80px;
+      }
+      
+    </style>
+  </head>
+  <body>
+    <h1 class="bold">Test your reaction</h1>
+    <p id="sottotitolo">Click on Ciccio as quickly as you can 10 times!<br>Remember: don't click on Geca</p>
+    <p id="time" class="bold">Your time: <span id="timeTaken"></span></p>
+    <h2 class="bold" id="end"></h2>
+    <h2 class="bold" id="win"></h2>
+    <img id="shape" src="ciccio.jpg"></div>
+
+    
+    <script type="text/javascript">
+      var start= new Date().getTime();
+      var timeTaken=0;
+      var sconfitta=0;
+      var count=0;
+      function getRandomColor() {
+        var letters = '0123456789ABCDEF';
+        var color = '#';
+        for (var i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+        }
+        return color;
+      }
+      function makeShapeAppear(){
+        var top=Math.random()*400;
+        var left=Math.random()*600;
+        var width=(Math.random()*150) + 50;
+        if (Math.random() > 0.5){
+          document.getElementById("shape").style.borderRadius="50%";
+        }
+        else{
+          document.getElementById("shape").style.borderRadius="0%";
+        }
+        //document.getElementById("shape").style.backgroundColor=getRandomColor();
+        document.getElementById("shape").style.top=top+ "px";
+        document.getElementById("shape").style.width=width+ "px";
+        document.getElementById("shape").style.height=width+ "px";
+        document.getElementById("shape").style.left=left+ "px";
+        if (sconfitta==0) document.getElementById("shape").style.display="block";
+        document.getElementById("shape").style.borderColor=getRandomColor();
+        if (Math.random() > 0.5){
+          $("#shape").attr("src","geca.jpg");
+          setTimeout(makeShapeAppear,Math.random()*3000);
+        } 
+        else{
+          $("#shape").attr("src","ciccio.jpg");
+        }
+        start=new Date().getTime();
+      }
+      function appearafterDelay(){
+        setTimeout(makeShapeAppear,Math.random()*2000);
+      }
+      function finished(){
+        document.getElementById("shape").style.display="none";
+        document.getElementById("time").style.display="none";
+        document.getElementById("win").innerHTML="Done! Your time: " + timeTaken.toFixed(2);
+      }
+      function lost(){
+        document.getElementById("shape").style.display="none";
+        document.getElementById("time").style.display="none";
+        document.getElementById("end").innerHTML="Game Over, you clicked on Geca :(";
+        sconfitta=1;
+      }
+      appearafterDelay();
+      document.getElementById("shape").onclick=function(){
+        var end = new Date().getTime();
+        ++count;
+        timeTaken += ((end-start)/1000);
+        if($("#shape").attr("src")=="geca.jpg") lost();
+        else{
+          document.getElementById("shape").style.display="none";
+          document.getElementById("timeTaken").innerHTML= (timeTaken).toFixed(2) + "s";
+          if(count==10) finished();
+          else appearafterDelay();
+        }
+      }
+    </script>
+  </body>
+</html>
