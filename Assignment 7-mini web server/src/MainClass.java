@@ -2,9 +2,10 @@ import java.io.IOException;
 import java.net.ServerSocket;
 
 public class MainClass {
+    final static int port=6789;
     public static void main(String [] args){
-        int port=6789;
-        try( ServerSocket serverSocket = new ServerSocket(port)){
+
+        try( ServerSocket serverSocket = new ServerSocket(port);){
             System.out.println("Server listening on port " + port);
 
             while(true){

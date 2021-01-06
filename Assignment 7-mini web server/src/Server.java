@@ -30,8 +30,8 @@ public class Server implements Runnable {
             return "text/html";
         else if(filename.endsWith(".gif"))
             return "image/gif";
-        else if(filename.endsWith(".jpeg") || filename.endsWith(".jpg"))
-            return "image/jpeg";
+        else if(filename.endsWith(".jpg"))
+            return "image/jpg";
         else return "text/plain";
     }
 
@@ -45,7 +45,6 @@ public class Server implements Runnable {
             reader=new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer=new BufferedOutputStream(socket.getOutputStream());
             headerWriter=new PrintWriter(socket.getOutputStream());
-
             String request= reader.readLine();
             String method=null;
 
