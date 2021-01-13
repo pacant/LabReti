@@ -1,5 +1,7 @@
 import com.fasterxml.jackson.core.async.ByteBufferFeeder;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationConfig;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.*;
@@ -12,52 +14,62 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.rmi.Remote;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.rmi.server.RemoteObject;
+import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 
 public class Server extends RemoteObject implements ServerRMI {
+    private static final long serialVersionUID = 1L;
     private List<Project> projects;
-    private int portRMI=2021;
-    private int serverport=6789;
     private List<User> users;
-    private List<Notify> clientStubs; // stub che il client mi passa con il metodo RMI register
+    private Map<Notify,String> clientStubs; // stub che il client mi passa con il metodo RMI register
     private Map<SocketChannel,String> socketNickname; // associa socket e nickname utente
-    //private List<Chat> chatAddress; // indirizzi e socket per chat
-    //private Map<SocketChannel, byte []> response; // Struttura ausiliaria per inviare le risposte, ad ogni client corrisponde un array di byte
     private ObjectMapper mapper;
     private File worthDirectory,userJSON,projectJSON;
 
 
     public Server(){
         super();
-        projects=new ArrayList<>();
-        users=new ArrayList<>();
-        clientStubs= new ArrayList<>();
-        //chatAddress=new ArrayList<>();
+        mapper=new ObjectMapper();
+        mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
+        clientStubs= new HashMap<>();
+        socketNickname=new HashMap<>();
         worthDirectory=new File("./Worth");
-        userJSON=new File(worthDirectory + "/Users.json");
-        projectJSON=new File(worthDirectory + "/Users.json");
-        socketNickname=new HashMap<SocketChannel, String>();
         retrieveFiles();
     }
     public void retrieveFiles(){
+        userJSON=new File(worthDirectory + "/Users.json");
+        projectJSON=new File(worthDirectory + "/Projects.json");
         try {
             if (!worthDirectory.exists()) worthDirectory.mkdir();
-            if (!userJSON.exists()) userJSON.createNewFile();
-            else users=mapper.readValue(userJSON,new TypeReference<List<User>>(){}); // oppure User[].class con Arrays.asList
-            if (!projectJSON.exists()) projectJSON.createNewFile();
-            else projects=mapper.readValue(projectJSON,new TypeReference<List<Project>>(){});
+            if (!userJSON.exists()){
+                userJSON.createNewFile();
+                users=new ArrayList<>();
+                mapper.writeValue(userJSON,users);
+            }
+            else users=new ArrayList<>(Arrays.asList(mapper.readValue(userJSON,User[].class))); // oppure User[].class con Arrays.asList
+            if (!projectJSON.exists()){
+                projectJSON.createNewFile();
+                projects=new ArrayList<>();
+                mapper.writeValue(projectJSON,projects);
+            }
+            else projects=new ArrayList<>(Arrays.asList(mapper.readValue(projectJSON,Project[].class)));
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
     public void startServer(){
+        System.out.println("START SERVER");
         ServerSocketChannel serverChannel;
         Selector selector;
         try{
             // creo il serversocketchannel e lo rendo non bloccante
             serverChannel=ServerSocketChannel.open();
-            serverChannel.socket().bind(new InetSocketAddress(serverport));
+            serverChannel.socket().bind(new InetSocketAddress(6789));
             serverChannel.configureBlocking(false);
 
             // creo il selettore e registro il serversocketchannel
@@ -68,7 +80,7 @@ public class Server extends RemoteObject implements ServerRMI {
             e.printStackTrace();
             return;
         }
-        System.out.println("Server waiting for connections on port " + this.serverport);
+        System.out.println("Server waiting for connections on port 6789");
         while(true){
             try { if (selector.select()==0) continue; }
             catch (IOException e) {
@@ -95,22 +107,135 @@ public class Server extends RemoteObject implements ServerRMI {
                         client.read(buffer);
                         String request=new String(buffer.array()).trim();
                         String [] command= request.split(" "); // serve per splittare comando e argomenti
-                        switch(command[0]){
+                        String response="";
+                        ByteBuffer byteBuffer;
+                        switch(command[0].toLowerCase()){
                             case "login":
-                                String response="";
-                                socketNickname.put(client,command[1]); // RIMUOVERLO NEL LOGOUT
-                                if(command.length!=3) response="Wrong arguments";
+                                ResponseHelper log = new ResponseHelper();
+                                socketNickname.put(client,command[1]);
+                                if(command.length!=3)log.setResponse("Wrong arguments");
                                 else{
-                                    response=login(command[1],command[2]); // command[1] e command[2] sono nick e password
+                                    log=login(command[1],command[2]); // command[1] e command[2] sono nick e password
                                 }
-                                ByteBuffer byteBuffer = ByteBuffer.wrap(response.getBytes());
-                                key.attach(byteBuffer); // attachment al channel, conterrà la risposta da mandare al client
+
+                                key.attach(log); // attachment al channel, conterrà la risposta da mandare al client
+                                break;
+                            case "logout":
+                                ResponseHelper logO=new ResponseHelper();
+                                if(command.length!=2) response="Wrong arguments";
+                                else if(!socketNickname.get(client).equalsIgnoreCase(command[1])) response="Wrong nickname";
+                                else response=logout(command[1]);
+                                logO.setResponse(response);
+                                key.attach(logO);
+                                break;
+                            case "listusers":
+                                ResponseHelper userList=new ResponseHelper();
+                                if(command.length!=1) userList.setResponse("Wrong arguments");
+                                else{
+                                    userList.setUserListStatus(listUsers());
+                                    userList.setResponse("OK");
+                                }
+                                key.attach(userList);
+                                break;
+                            case "listonlineusers":
+                                ResponseHelper userOnlineList=new ResponseHelper();
+                                if(command.length!=1) userOnlineList.setResponse("Wrong arguments");
+                                else{
+                                    userOnlineList.setList(listOnlineUsers());
+                                    userOnlineList.setResponse("OK");
+                                }
+                                key.attach(userOnlineList);
+                                break;
+                            case "listprojects":
+                                ResponseHelper projectList=new ResponseHelper();
+                                if(command.length!=1) projectList.setResponse("Wrong arguments");
+                                else projectList=listProject(socketNickname.get(client));
+                                key.attach(projectList);
+                                break;
+                            case "createproject":
+                                ResponseHelper createP=new ResponseHelper();
+                                if(command.length!=2) response="Wrong arguments";
+                                else response=createProject(command[1],socketNickname.get(client));
+                                createP.setResponse(response);
+                                key.attach(createP);
+                                break;
+                            case "addmember":
+                                ResponseHelper addM = new ResponseHelper();
+                                if(command.length!=3) response="Wrong arguments";
+                                else response=addMember(command[1],socketNickname.get(client),command[2]);
+                                addM.setResponse(response);
+                                key.attach(addM);
+                                break;
+                            case "showmembers":
+                                ResponseHelper membersList=new ResponseHelper();
+                                if(command.length!=2) membersList.setResponse("Wrong arguments");
+                                else membersList=showMembers(command[1],socketNickname.get(client));
+                                key.attach(membersList);
+                                break;
+                            case "showcards":
+                                ResponseHelper cardsList = new ResponseHelper();
+                                if(command.length!=2) cardsList.setResponse("Wrong arguments");
+                                else cardsList=showCards(command[1],socketNickname.get(client));
+                                key.attach(cardsList);
+                                break;
+                            case "showcard":
+                                ResponseHelper cardList = new ResponseHelper();
+                                if(command.length!=3) cardList.setResponse("Wrong arguments");
+                                else cardList=showCard(command[1],command[2],socketNickname.get(client));
+                                key.attach(cardList);
+                                break;
+                            case "addcard":
+                                ResponseHelper addC=new ResponseHelper();
+                                if(command.length<4) response="Wrong arguments";
+                                else response=addCard(request,socketNickname.get(client));
+                                addC.setResponse(response);
+                                key.attach(addC);
+                                break;
+                            case "movecard":
+                                ResponseHelper moveC= new ResponseHelper();
+                                if(command.length!=5) response="Wrong arguments";
+                                else response=moveCard(command[1],command[2],command[3],command[4],socketNickname.get(client));
+                                moveC.setResponse(response);
+                                key.attach(moveC);
+                                break;
+                            case "getcardhistory":
+                                ResponseHelper cardHistoryList= new ResponseHelper();
+                                if(command.length!=3) cardHistoryList.setResponse("Wrong arguments");
+                                else cardHistoryList=getCardHistory(command[1],command[2],socketNickname.get(client));
+                                key.attach(cardHistoryList);
+                                break;
+                            case "cancelproject":
+                                ResponseHelper cancelP = new ResponseHelper();
+                                if(command.length!=2) response="Wrong arguments";
+                                else response=cancelProject(command[1],socketNickname.get(client));
+                                cancelP.setResponse(response);
+                                key.attach(cancelP);
+                                break;
+                            case "quit":
+                                System.out.println("User " + socketNickname.get(client) + " closing connection");
+                                for(User u : users){
+                                    if(u.getNick().equals(socketNickname.get(client))){
+                                        if(u.getStatus()) logout(socketNickname.get(client));
+                                    }
+                                }
+                                socketNickname.remove(client);
+                                client.close();
+                                key.cancel();
                                 break;
                         }
+                        if(key.isValid()) key.interestOps(SelectionKey.OP_WRITE);
+                    }
+                    else if(key.isWritable()){
+                        SocketChannel client= (SocketChannel)key.channel();
+                        ResponseHelper response = (ResponseHelper) key.attachment();
+
+                        client.write(ByteBuffer.wrap(mapper.writeValueAsBytes(response)));
+                        key.interestOps(SelectionKey.OP_READ);
                     }
                 }
                 catch(IOException e){
                     key.cancel();
+                    socketNickname.remove(key.channel());
                     try{
                         key.channel().close();
                     }
@@ -125,36 +250,358 @@ public class Server extends RemoteObject implements ServerRMI {
             if (u.getNick().equalsIgnoreCase(nick)) return "User already exist";
         }
         User u= new User(nick,pass);
-        // fare callback
+        try { update(nick,u.getStatus()); } // callbacks
+        catch(RemoteException e){
+            e.printStackTrace();
+        }
         users.add(u);
         try {
             mapper.writeValue(userJSON, users);
         }
         catch(IOException e){e.printStackTrace();}
-        return "Registration completed successfully";
+        System.out.println("User " + nick + " registered");
+        return "OK";
     }
-    public String login(String nick, String pass){
-        if (nick.isEmpty() || pass.isEmpty()) return "Empty fields";
+    public ResponseHelper login(String nick, String pass){
+        ResponseHelper response=new ResponseHelper();
+        List<Chat> chatAddress=new ArrayList<>();
+        if (nick.isEmpty() || pass.isEmpty()){
+            response.setResponse("Empty field");
+            return response;
+        }
         for(User u : users){
             if (u.getNick().equalsIgnoreCase(nick)){
-                if(u.getStatus()) return "User already logged in";
-                if(!u.getPass().equals(pass)) return "Wrong password";
+                if(u.getStatus()){
+                    response.setResponse("User already logged in");
+                    return response;
+                }
+                if(!u.getPass().equals(pass)){
+                    response.setResponse("Wrong password");
+                    return response;
+                }
                 else{
                     u.setStatus(true);
-                    // fare callbacks
-                    return "Logged in";
+                    try { update(nick,u.getStatus()); } // callbacks
+                    catch(RemoteException e){
+                        e.printStackTrace();
+                    }
+                    System.out.println("User " + nick + " logged in");
+                    for(Project p : projects){
+                        if(p.isMember(nick)){
+                            Chat c=new Chat(p.getProjectID(),p.getChatAddress(),p.getPort()); // restituisco all'utente la lista degli indirizzi delle chat
+                            chatAddress.add(c);
+                        }
+                    }
+                    response.setResponse("OK");
+                    if(!chatAddress.isEmpty()) response.setChatAddress(chatAddress);
+                    return response;
                 }
+            }
+        }
+        System.out.println("User " + nick + " login failed");
+        response.setResponse("User not found");
+        return response;
+    }
+    public String logout(String nick){
+        if(nick.isEmpty()) return "Empty field";
+        for(User u : users){
+            if(u.getNick().equalsIgnoreCase(nick)){
+                if(!u.getStatus()) return "User is already offline";
+                u.setStatus(false);
+                try { update(nick,u.getStatus()); } // callbacks
+                catch(RemoteException e){
+                    e.printStackTrace();
+                }
+                System.out.println("User " + nick + " logged out");
+                return "OK";
+            }
+        }
+        System.out.println("User " + nick + " logout failed");
+        return "User not found";
+
+    }
+    public Map<String,Boolean> listUsers(){
+        Map<String,Boolean> userList=new HashMap<>();
+        for (User u : users){
+            userList.put(u.getNick(),u.getStatus());
+        }
+        return userList;
+    }
+    public List<String> listOnlineUsers(){
+        List<String> userOnlineList=new ArrayList<>();
+        for (User u : users){
+            if(u.getStatus()) userOnlineList.add(u.getNick());
+        }
+        return userOnlineList;
+    }
+    public ResponseHelper listProject(String nick){
+        ResponseHelper response=new ResponseHelper();
+        List<String> list=new ArrayList<>();
+        if(nick.isEmpty()){
+            response.setResponse("Empty field");
+            return response;
+        }
+        for (Project p : projects){
+            if(p.isMember(nick)) list.add(p.getProjectID());
+        }
+
+        if(list.isEmpty()) response.setResponse("User's project list is empty");
+        else{
+            response.setList(list);
+            response.setResponse("OK");
+        }
+        return response;
+
+    }
+    public String createProject(String projectName,String nick){
+        if(projectName.isEmpty()||nick.isEmpty()) return "Empty field";
+        for(Project p : projects){
+            if(p.getProjectID().equalsIgnoreCase(projectName)) return "Project name already exist";
+        }
+        String multicastAddress = Utils.generateMulticast();
+        int port= Utils.randBetween(1025,65536);
+        Project project = new Project(nick,projectName,multicastAddress,port);
+        projects.add(project);
+        try{
+            mapper.writeValue(projectJSON,projects); // aggiorno il file
+        }
+        catch(IOException e){
+            e.printStackTrace();
+        }
+        Chat chat=new Chat(projectName,multicastAddress,port);
+
+        try { updateChat(chat,nick); } // mando al creatore del progetto l'indirizzo della chat
+        catch(RemoteException e ){
+            e.printStackTrace();
+        }
+        System.out.println("Project " + projectName + " created");
+        return "Project created";
+    }
+    public String addMember(String projectName, String nick, String newUser){
+        if(projectName.isEmpty()||nick.isEmpty()||newUser.isEmpty()) return "Empty field";
+        for(User u : users){
+            if (u.getNick().equalsIgnoreCase(newUser)){
+                for(Project p : projects){
+                    if(p.getProjectID().equalsIgnoreCase(projectName)){
+                        if (!p.isMember(nick)){
+                            return "User isn't a member";
+                        }
+                        Chat chat = new Chat(p.getProjectID(),p.getChatAddress(),p.getPort());
+
+                        try { updateChat(chat,newUser); } // mando indirizzo della chat all'utente
+                        catch(RemoteException e ){
+                            e.printStackTrace();
+                        }
+                        return p.addMember(newUser);
+                    }
+                }
+                return "Project not found";
             }
         }
         return "User not found";
     }
-    // metodo per trasformare un oggetto in un byte[], trovato online.
-    public byte [] ObjtoByte(ResponseHelper<?> obj) throws IOException {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        ObjectOutputStream oos = new ObjectOutputStream(bos);
-        oos.writeObject(obj);
-        oos.flush();
-        byte [] data = bos.toByteArray();
-        return data;
+    public ResponseHelper showMembers(String projectName,String nick){
+        ResponseHelper response=new ResponseHelper();
+        if(projectName.isEmpty()||nick.isEmpty()){
+            response.setResponse("Empty field");
+            return response;
+        }
+        for(Project p : projects){
+            if(p.getProjectID().equalsIgnoreCase(projectName)){
+                if (!p.isMember(nick)){
+                    response.setResponse("User isn't a member");
+                    return response;
+                }
+                response.setList(p.getMembers());
+                response.setResponse("OK");
+                return response;
+            }
+        }
+        response.setResponse("Project not found");
+        return response;
     }
+    public ResponseHelper showCards(String projectName,String nick){
+        ResponseHelper response=new ResponseHelper();
+        if(projectName.isEmpty()||nick.isEmpty()){
+            response.setResponse("Empty field");
+            return response;
+        }
+        for(Project p : projects){
+            if(p.getProjectID().equalsIgnoreCase(projectName)){
+                if (!p.isMember(nick)){
+                    response.setResponse("User isn't a member");
+                    return response;
+                }
+                response.setList(p.getCardsList());
+                response.setResponse("OK");
+                return response;
+            }
+        }
+        response.setResponse("Project not found");
+        return response;
+    }
+    public ResponseHelper showCard(String projectName,String cardName,String nick){
+        ResponseHelper response=new ResponseHelper();
+        if(projectName.isEmpty()||nick.isEmpty()||cardName.isEmpty()){
+            response.setResponse("Empty field");
+            return response;
+        }
+        for(Project p : projects){
+            if(p.getProjectID().equalsIgnoreCase(projectName)){
+                if (!p.isMember(nick)){
+                    response.setResponse("User isn't a member");
+                    return response;
+                }
+                List<String> tmp;
+                if((tmp=p.retrieveCard(cardName))==null) response.setResponse("Card not found");
+                else response.setResponse("OK");
+                response.setList(tmp);
+                return response;
+            }
+        }
+        response.setResponse("Project not found");
+        return response;
+    }
+    public String addCard(String command, String nick){
+        String [] commands = command.split(" ");
+        String projectName=commands[1];
+        String cardName=commands[2];
+        String description="";
+        for(int i=3;i<commands.length;i++){
+            description+=commands[i] + " ";
+        }
+        if(commands[1].isEmpty()||commands[2].isEmpty()||commands[3].isEmpty()||nick.isEmpty()){
+            return "Empty field";
+        }
+        for(Project p : projects){
+            if(p.getProjectID().equalsIgnoreCase(commands[1])){
+                if(!p.isMember(nick)){
+                    return "User isn't a member";
+                }
+                try{return p.addCard(commands[2],description);}
+                catch(IOException e){
+                    e.printStackTrace();
+                }
+            }
+        }
+        return "Project not found";
+    }
+    public String moveCard(String projectName,String cardName,String start,String end,String nick) {
+        if (projectName.isEmpty() || start.isEmpty() || end.isEmpty() || cardName.isEmpty() || nick.isEmpty()) return "Empty field";
+            for (Project p : projects) {
+                if (p.getProjectID().equalsIgnoreCase(projectName)) {
+                    if (!p.isMember(nick)) {
+                        return "User isn't a member";
+                    }
+                    try {
+                        return p.moveCard(cardName, start, end);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            return "Project not found";
+    }
+    public ResponseHelper getCardHistory(String projectName,String cardName,String nick){
+        ResponseHelper response=new ResponseHelper();
+        if(projectName.isEmpty()||cardName.isEmpty()||nick.isEmpty()){
+            response.setResponse("Empty field");
+            return response;
+        }
+        for (Project p : projects) {
+            if (p.getProjectID().equalsIgnoreCase(projectName)) {
+                if (!p.isMember(nick)) {
+                    response.setResponse("User isn't a member");
+                }
+                List<String> tmp;
+                if((tmp=p.retrieveCardHistory(cardName))==null) response.setResponse("Card not found");
+                else response.setResponse("OK");
+                response.setList(tmp);
+                return response;
+            }
+        }
+        response.setResponse("Project not found");
+        return response;
+    }
+    public String cancelProject(String projectName, String nick){
+        if(projectName.isEmpty()||nick.isEmpty()) return "Empty field";
+        for(Project p : projects){
+            if(p.getProjectID().equalsIgnoreCase(projectName)){
+                if(!p.isMember(nick)) return "User isn't a member";
+                if(!p.canDelete()) return "Can't delete project: all the cards have to be in TODO list";
+                try{
+                    p.deleteProject();
+                    projects.remove(p);
+                    mapper.writeValue(projectJSON,projects);
+                    updateremoveChat(new Chat(p.getProjectID(),p.getChatAddress(),p.getPort()));
+                    return "Project canceled";
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return "Project doesn't exist";
+    }
+    // CALLBACKS
+    public synchronized Map<String,Boolean> registerCB(Notify client,String nick) throws RemoteException{
+        Map<String,Boolean> userList=new HashMap<>();
+        this.clientStubs.put(client,nick); // salvo lo stub del client//
+        for (User u : users){
+            userList.put(u.getNick(),u.getStatus()); // lista degli utenti online e del loro stato
+        }
+        System.out.println("Client registered for callbacks");
+        return userList;
+    }
+    public synchronized void unregisterCB(Notify client,String nick) throws RemoteException{
+        if(clientStubs.remove(client,nick)) System.out.println("Client unregistered for callbacks");
+        else System.out.println("Unable to unregister client for callbacks");
+    }
+    public void update(String nick,Boolean status)throws RemoteException {
+        doCallbacks(nick,status);
+    }
+    public void updateChat(Chat chat,String nick)throws RemoteException{
+        doChatCallbacks(chat,nick);
+    }
+    public void updateremoveChat(Chat chat) throws  RemoteException{
+        doRemoveChatCallbacks(chat);
+    }
+    public synchronized void doRemoveChatCallbacks(Chat chat) throws RemoteException{
+        Project p=null;
+        for(Project tmp : projects){
+            if(chat.getProjectName().equalsIgnoreCase(tmp.getProjectID())){
+                p=tmp;
+                break;
+            }
+        }
+        if(p!=null) {
+            for (Notify stub : clientStubs.keySet()) {
+                if (p.isMember(clientStubs.get(stub))) stub.notifyProjectCancel(chat);
+            }
+        }
+    }
+    public synchronized void doChatCallbacks(Chat chat,String nick)throws RemoteException{
+        for(Notify stub : clientStubs.keySet()){
+            if(clientStubs.get(stub).equalsIgnoreCase(nick)) stub.notifyProject(chat);
+        }
+        System.out.println("Chat callbacks done");
+    }
+    public synchronized void doCallbacks(String nick, Boolean status)throws RemoteException{
+        for(Notify stub : clientStubs.keySet()){
+            stub.notifyUser(nick,status);
+        }
+        System.out.println("Callbacks done");
+    }
+    public static void main(String []args){
+        Server server = new Server();
+        try{
+            ServerRMI stub = (ServerRMI) UnicastRemoteObject.exportObject(server,0);
+            LocateRegistry.createRegistry(2021);
+            Registry r = LocateRegistry.getRegistry(2021);
+            r.rebind("WorthServer",stub);
+            server.startServer();
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+    }
+    //TODO: READCHAT E WRITECHAT NEL CLIENT. CON LE CALLBACK INVIO UN OGGETTO CONTENENTE INDIRIZZO CHAT E RELATIVO PROGETTO. IL CLIENT TIENE
 }

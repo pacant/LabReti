@@ -1,5 +1,6 @@
 import java.rmi.Remote;
 import java.rmi.RemoteException;
+import java.util.Map;
 
 public interface ServerRMI extends Remote {
 
@@ -11,7 +12,7 @@ public interface ServerRMI extends Remote {
     public String register(String nick,String pass) throws RemoteException;
 
     // registrazione alle callback del server, per le notifiche
-    public void registerCB(Notify client,String nick) throws RemoteException;
+    public Map<String,Boolean> registerCB(Notify client,String nick) throws RemoteException;
 
     public void unregisterCB(Notify client,String nick) throws RemoteException;
 }

@@ -16,7 +16,7 @@ public class Project {
     private List<String> doneCards;
     private List<String> members;
 
-    private String chatAddress;
+    private String chatAddress; // potrei mettere direttamente un oggetto Chat
     private int port;
 
     private File directory;
@@ -40,14 +40,13 @@ public class Project {
         mapper = new ObjectMapper();
     }
 
-    public Project() {
-    }
+    public Project() { }
 
     // aggiungere un membro al progetto
     public String addMember(String nick) {
         if (!members.contains(nick)) {
             members.add(nick);
-            return "Done";
+            return "Member added";
         }
         return "The user is already a member of the project";
     }
@@ -65,8 +64,9 @@ public class Project {
         cards.add(card);
         todoCards.add(name);
         File filecard = new File(directory + "/" + name + ".json");
+        filecard.createNewFile();
         mapper.writeValue(filecard, card);
-        return "Done";
+        return "Card added";
     }
 
     // recuperare informazioni relative ad una card
@@ -80,7 +80,7 @@ public class Project {
     }
 
     // recuperare history di una card
-    public List<cardStatus> retrieveCardHistory(String name) {
+    public List<String> retrieveCardHistory(String name) {
         for (Card card : cards) {
             if (card.getName().equalsIgnoreCase(name)) {
                 return card.getHistory();
@@ -88,31 +88,38 @@ public class Project {
         }
         return null;
     }
+    public List<String> getCardsList(){ // una lista con solo i nomi delle carte
+        List<String> result=new ArrayList<>();
+        for(Card c : cards){
+            result.add(c.getName());
+        }
+        return result;
+    }
     public String moveCard(String name, String start, String end) throws IOException {
         for(Card card : cards){
             if (card.getName().equalsIgnoreCase(name)){
                 switch(card.getStatus().name()){
                     case "TODO" :
-                        if(!start.equals("TODO")) return "The card isn't in TODO list";
-                        if(!end.equals("INPROGRESS")) return "The card in TODO can only be moved to INPROGRESS";
-                        card.setStatus(cardStatus.valueOf(start.toUpperCase()));
+                        if(!start.equalsIgnoreCase("TODO")) return "The card isn't in TODO list";
+                        if(!end.equalsIgnoreCase("INPROGRESS")) return "The card in TODO can only be moved to INPROGRESS";
+                        card.setStatus(cardStatus.valueOf(end.toUpperCase()));
                         todoCards.remove(name);
                         inProgressCards.add(name);
                         break;
 
                     case "INPROGRESS" :
-                        if(!start.equals("INPROGRESS")) return "Card isn't in INPROGRESS list";
-                        if((!end.equals("TOBEREVISED")) && (!end.equals("DONE"))) return "The card in INPROGRESS can only be moved to TOBEREVISED or DONE";
-                        card.setStatus(cardStatus.valueOf(start.toUpperCase()));
+                        if(!start.equalsIgnoreCase("INPROGRESS")) return "Card isn't in INPROGRESS list";
+                        if((!end.equalsIgnoreCase("TOBEREVISED")) && (!end.equals("DONE"))) return "The card in INPROGRESS can only be moved to TOBEREVISED or DONE";
+                        card.setStatus(cardStatus.valueOf(end.toUpperCase()));
                         inProgressCards.remove(name);
                         if (end.equalsIgnoreCase("TOBEREVISED")) toberevisedCards.add(name);
                         if (end.equalsIgnoreCase("DONE")) doneCards.add(name);
                         break;
 
                     case "TOBEREVISED" :
-                        if(!start.equals("TOBEREVISED")) return "The card isn't in TOBEREVISED list";
-                        if((!end.equals("INPROGRESS")) && (!end.equals("DONE"))) return "The card in TOBEREVISED can only be moved to INPROGRESS or DONE";
-                        card.setStatus(cardStatus.valueOf(start.toUpperCase()));
+                        if(!start.equalsIgnoreCase("TOBEREVISED")) return "The card isn't in TOBEREVISED list";
+                        if((!end.equalsIgnoreCase("INPROGRESS")) && (!end.equals("DONE"))) return "The card in TOBEREVISED can only be moved to INPROGRESS or DONE";
+                        card.setStatus(cardStatus.valueOf(end.toUpperCase()));
                         toberevisedCards.remove(name);
                         if (end.equalsIgnoreCase("INPROGRESS")) inProgressCards.add(name);
                         if (end.equalsIgnoreCase("DONE")) doneCards.add(name);
@@ -123,7 +130,7 @@ public class Project {
                 }
                 File filecard = new File(directory + "/" + name + ".json");
                 mapper.writeValue(filecard, card);
-                return "Done";
+                return "Card moved";
             }
         }
         return "The card doesn't exist";

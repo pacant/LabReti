@@ -1,7 +1,6 @@
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-@JsonIgnoreProperties({"status"})
 public class User {
     private Boolean status; // true ONLINE, false OFFLINE
     // credenziali di accesso
@@ -13,16 +12,20 @@ public class User {
         this.pass=pass;
         this.status=false;
     }
-    public User(){} // costruttore vuoto per serializzazione
+    public User(){
+        this.status=false;
+    }
 
 
     // getters and setters
 
 
+    @JsonIgnore
     public void setStatus(Boolean status){
         this.status=status;
     }
 
+    @JsonIgnore
     public boolean getStatus(){
         return this.status;
     }

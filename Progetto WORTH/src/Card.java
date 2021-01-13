@@ -5,7 +5,7 @@ public class Card {
     private String name;
     private String info;
     private cardStatus status;
-    private List<cardStatus> history;
+    private List<String> history;
 
     public Card(){}
 
@@ -14,12 +14,12 @@ public class Card {
         this.info=info;
         status=cardStatus.TODO;
         this.history=new ArrayList<>();
-        this.history.add(cardStatus.TODO);
+        this.history.add("TODO");
     }
     // cambiare la lista in cui si trova la card
     public void changeStatus(cardStatus status){
         this.status=status;
-        history.add(status);
+        history.add(status.name());
     }
     // per il comando showCard, per recuperare le informazioni relative ad una carta
     public List<String> retrieveCard(){
@@ -53,11 +53,11 @@ public class Card {
         return this.status;
     }
 
-    public void setHistory(List<cardStatus> history){
+    public void setHistory(List<String> history){
         this.history=history;
     }
 
-    public List<cardStatus> getHistory(){
+    public List<String> getHistory(){
         return this.history;
     }
 }

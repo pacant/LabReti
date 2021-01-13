@@ -1,13 +1,21 @@
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import java.io.Serializable;
 import java.net.MulticastSocket;
 
-public class Chat {
+@JsonIgnoreProperties({"socket"})
+public class Chat implements Serializable {
     //informazioni relative ad una chat
-    private MulticastSocket socket;
+    private String projectName;
     private String address;
     private int port;
+    private MulticastSocket socket;
 
-    public Chat(MulticastSocket socket, String address, int port){
-        this.socket=socket;
+    public Chat(){}
+
+    public Chat(String projectName, String address, int port){
+        this.projectName=projectName;
         this.address=address;
         this.port=port;
     }
@@ -16,9 +24,11 @@ public class Chat {
         this.port=port;
     }
 
+
     public void setSocket(MulticastSocket socket){
         this.socket=socket;
     }
+    public void setProjectName(String projectName){ this.projectName=projectName; }
     public void setAddress(String address){
         this.address=address;
     }
@@ -34,5 +44,6 @@ public class Chat {
     public MulticastSocket getSocket(){
         return this.socket;
     }
+    public String getProjectName(){ return this.projectName; }
 
 }
