@@ -1,3 +1,4 @@
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.File;
@@ -16,7 +17,7 @@ public class Project {
     private List<String> doneCards;
     private List<String> members;
 
-    private String chatAddress; // potrei mettere direttamente un oggetto Chat
+    private String chatAddress;
     private int port;
 
     private File directory;
@@ -60,8 +61,9 @@ public class Project {
     // aggiungere una card al progetto
     public String addCard(String name, String info) throws IOException {
         Card card = new Card(name, info);
-        if (cards.contains(card)) return "Card already in the project";
-        cards.add(card);
+        for(Card c : cards){
+            if(c.getName().equalsIgnoreCase(name)) return "Card already in the project";
+        }cards.add(card);
         todoCards.add(name);
         File filecard = new File(directory + "/" + name + ".json");
         filecard.createNewFile();
@@ -88,6 +90,7 @@ public class Project {
         }
         return null;
     }
+    @JsonIgnore
     public List<String> getCardsList(){ // una lista con solo i nomi delle carte
         List<String> result=new ArrayList<>();
         for(Card c : cards){
@@ -109,7 +112,7 @@ public class Project {
 
                     case "INPROGRESS" :
                         if(!start.equalsIgnoreCase("INPROGRESS")) return "Card isn't in INPROGRESS list";
-                        if((!end.equalsIgnoreCase("TOBEREVISED")) && (!end.equals("DONE"))) return "The card in INPROGRESS can only be moved to TOBEREVISED or DONE";
+                        if((!end.equalsIgnoreCase("TOBEREVISED")) && (!end.equalsIgnoreCase("DONE"))) return "The card in INPROGRESS can only be moved to TOBEREVISED or DONE";
                         card.setStatus(cardStatus.valueOf(end.toUpperCase()));
                         inProgressCards.remove(name);
                         if (end.equalsIgnoreCase("TOBEREVISED")) toberevisedCards.add(name);
@@ -118,7 +121,7 @@ public class Project {
 
                     case "TOBEREVISED" :
                         if(!start.equalsIgnoreCase("TOBEREVISED")) return "The card isn't in TOBEREVISED list";
-                        if((!end.equalsIgnoreCase("INPROGRESS")) && (!end.equals("DONE"))) return "The card in TOBEREVISED can only be moved to INPROGRESS or DONE";
+                        if((!end.equalsIgnoreCase("INPROGRESS")) && (!end.equalsIgnoreCase("DONE"))) return "The card in TOBEREVISED can only be moved to INPROGRESS or DONE";
                         card.setStatus(cardStatus.valueOf(end.toUpperCase()));
                         toberevisedCards.remove(name);
                         if (end.equalsIgnoreCase("INPROGRESS")) inProgressCards.add(name);

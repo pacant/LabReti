@@ -1,20 +1,14 @@
-import com.fasterxml.jackson.core.async.ByteBufferFeeder;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationConfig;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import javax.sound.midi.SysexMessage;
 import java.io.*;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.MulticastSocket;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -22,7 +16,7 @@ import java.rmi.server.RemoteObject;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 
-public class Server extends RemoteObject implements ServerRMI {
+public class ServerMain extends RemoteObject implements ServerRMI {
     private static final long serialVersionUID = 1L;
     private List<Project> projects;
     private List<User> users;
@@ -32,7 +26,7 @@ public class Server extends RemoteObject implements ServerRMI {
     private File worthDirectory,userJSON,projectJSON;
 
 
-    public Server(){
+    public ServerMain(){
         super();
         mapper=new ObjectMapper();
         mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
@@ -51,7 +45,7 @@ public class Server extends RemoteObject implements ServerRMI {
                 users=new ArrayList<>();
                 mapper.writeValue(userJSON,users);
             }
-            else users=new ArrayList<>(Arrays.asList(mapper.readValue(userJSON,User[].class))); // oppure User[].class con Arrays.asList
+            else users=new ArrayList<>(Arrays.asList(mapper.readValue(userJSON,User[].class))); // oppure con Typereference
             if (!projectJSON.exists()){
                 projectJSON.createNewFile();
                 projects=new ArrayList<>();
@@ -63,7 +57,6 @@ public class Server extends RemoteObject implements ServerRMI {
         }
     }
     public void startServer(){
-        System.out.println("START SERVER");
         ServerSocketChannel serverChannel;
         Selector selector;
         try{
@@ -98,20 +91,18 @@ public class Server extends RemoteObject implements ServerRMI {
                         SocketChannel client= ssc.accept();
                         System.out.println("Server connected to client " + client.getRemoteAddress());
                         client.configureBlocking(false);
-                        SelectionKey keyClient = client.register(selector,SelectionKey.OP_READ);
-
+                        client.register(selector,SelectionKey.OP_READ);
                     }
                     else if (key.isReadable()){
                         SocketChannel client= (SocketChannel) key.channel();
                         ByteBuffer buffer= ByteBuffer.allocate(256);
                         client.read(buffer);
                         String request=new String(buffer.array()).trim();
-                        String [] command= request.split(" "); // serve per splittare comando e argomenti
+                        String [] command= request.split(" "); //  splittare comando e argomenti
                         String response="";
-                        ByteBuffer byteBuffer;
                         switch(command[0].toLowerCase()){
                             case "login":
-                                ResponseHelper log = new ResponseHelper();
+                                ResponseHelper<Chat> log = new ResponseHelper();
                                 socketNickname.put(client,command[1]);
                                 if(command.length!=3)log.setResponse("Wrong arguments");
                                 else{
@@ -121,91 +112,67 @@ public class Server extends RemoteObject implements ServerRMI {
                                 key.attach(log); // attachment al channel, conterrà la risposta da mandare al client
                                 break;
                             case "logout":
-                                ResponseHelper logO=new ResponseHelper();
+                                ResponseHelper<Chat> logO=new ResponseHelper();
                                 if(command.length!=2) response="Wrong arguments";
                                 else if(!socketNickname.get(client).equalsIgnoreCase(command[1])) response="Wrong nickname";
                                 else response=logout(command[1]);
                                 logO.setResponse(response);
                                 key.attach(logO);
                                 break;
-                            case "listusers":
-                                ResponseHelper userList=new ResponseHelper();
-                                if(command.length!=1) userList.setResponse("Wrong arguments");
-                                else{
-                                    userList.setUserListStatus(listUsers());
-                                    userList.setResponse("OK");
-                                }
-                                key.attach(userList);
-                                break;
-                            case "listonlineusers":
-                                ResponseHelper userOnlineList=new ResponseHelper();
-                                if(command.length!=1) userOnlineList.setResponse("Wrong arguments");
-                                else{
-                                    userOnlineList.setList(listOnlineUsers());
-                                    userOnlineList.setResponse("OK");
-                                }
-                                key.attach(userOnlineList);
-                                break;
-                            case "listprojects":
-                                ResponseHelper projectList=new ResponseHelper();
-                                if(command.length!=1) projectList.setResponse("Wrong arguments");
-                                else projectList=listProject(socketNickname.get(client));
-                                key.attach(projectList);
-                                break;
                             case "createproject":
-                                ResponseHelper createP=new ResponseHelper();
+                                ResponseHelper<String> createP=new ResponseHelper();
                                 if(command.length!=2) response="Wrong arguments";
                                 else response=createProject(command[1],socketNickname.get(client));
                                 createP.setResponse(response);
                                 key.attach(createP);
                                 break;
                             case "addmember":
-                                ResponseHelper addM = new ResponseHelper();
+                                ResponseHelper<String> addM = new ResponseHelper();
                                 if(command.length!=3) response="Wrong arguments";
                                 else response=addMember(command[1],socketNickname.get(client),command[2]);
                                 addM.setResponse(response);
                                 key.attach(addM);
                                 break;
                             case "showmembers":
-                                ResponseHelper membersList=new ResponseHelper();
+                                ResponseHelper<String> membersList=new ResponseHelper();
                                 if(command.length!=2) membersList.setResponse("Wrong arguments");
                                 else membersList=showMembers(command[1],socketNickname.get(client));
                                 key.attach(membersList);
                                 break;
                             case "showcards":
-                                ResponseHelper cardsList = new ResponseHelper();
+                                ResponseHelper<String> cardsList = new ResponseHelper();
                                 if(command.length!=2) cardsList.setResponse("Wrong arguments");
                                 else cardsList=showCards(command[1],socketNickname.get(client));
                                 key.attach(cardsList);
                                 break;
                             case "showcard":
-                                ResponseHelper cardList = new ResponseHelper();
+                                ResponseHelper<String> cardList = new ResponseHelper();
                                 if(command.length!=3) cardList.setResponse("Wrong arguments");
                                 else cardList=showCard(command[1],command[2],socketNickname.get(client));
                                 key.attach(cardList);
                                 break;
                             case "addcard":
-                                ResponseHelper addC=new ResponseHelper();
+                                ResponseHelper<String> addC=new ResponseHelper();
                                 if(command.length<4) response="Wrong arguments";
                                 else response=addCard(request,socketNickname.get(client));
                                 addC.setResponse(response);
                                 key.attach(addC);
                                 break;
                             case "movecard":
-                                ResponseHelper moveC= new ResponseHelper();
+                                ResponseHelper<String> moveC= new ResponseHelper();
                                 if(command.length!=5) response="Wrong arguments";
                                 else response=moveCard(command[1],command[2],command[3],command[4],socketNickname.get(client));
                                 moveC.setResponse(response);
                                 key.attach(moveC);
                                 break;
                             case "getcardhistory":
-                                ResponseHelper cardHistoryList= new ResponseHelper();
+                                ResponseHelper<String> cardHistoryList= new ResponseHelper();
                                 if(command.length!=3) cardHistoryList.setResponse("Wrong arguments");
                                 else cardHistoryList=getCardHistory(command[1],command[2],socketNickname.get(client));
                                 key.attach(cardHistoryList);
                                 break;
                             case "cancelproject":
-                                ResponseHelper cancelP = new ResponseHelper();
+                                ResponseHelper<String> cancelP = new ResponseHelper();
                                 if(command.length!=2) response="Wrong arguments";
                                 else response=cancelProject(command[1],socketNickname.get(client));
                                 cancelP.setResponse(response);
@@ -227,7 +194,7 @@ public class Server extends RemoteObject implements ServerRMI {
                     }
                     else if(key.isWritable()){
                         SocketChannel client= (SocketChannel)key.channel();
-                        ResponseHelper response = (ResponseHelper) key.attachment();
+                        ResponseHelper<?> response = (ResponseHelper<?>) key.attachment();
 
                         client.write(ByteBuffer.wrap(mapper.writeValueAsBytes(response)));
                         key.interestOps(SelectionKey.OP_READ);
@@ -262,8 +229,8 @@ public class Server extends RemoteObject implements ServerRMI {
         System.out.println("User " + nick + " registered");
         return "OK";
     }
-    public ResponseHelper login(String nick, String pass){
-        ResponseHelper response=new ResponseHelper();
+    public ResponseHelper<Chat> login(String nick, String pass){
+        ResponseHelper<Chat> response=new ResponseHelper<>();
         List<Chat> chatAddress=new ArrayList<>();
         if (nick.isEmpty() || pass.isEmpty()){
             response.setResponse("Empty field");
@@ -293,7 +260,7 @@ public class Server extends RemoteObject implements ServerRMI {
                         }
                     }
                     response.setResponse("OK");
-                    if(!chatAddress.isEmpty()) response.setChatAddress(chatAddress);
+                    if(!chatAddress.isEmpty()) response.setList(chatAddress);
                     return response;
                 }
             }
@@ -318,39 +285,6 @@ public class Server extends RemoteObject implements ServerRMI {
         }
         System.out.println("User " + nick + " logout failed");
         return "User not found";
-
-    }
-    public Map<String,Boolean> listUsers(){
-        Map<String,Boolean> userList=new HashMap<>();
-        for (User u : users){
-            userList.put(u.getNick(),u.getStatus());
-        }
-        return userList;
-    }
-    public List<String> listOnlineUsers(){
-        List<String> userOnlineList=new ArrayList<>();
-        for (User u : users){
-            if(u.getStatus()) userOnlineList.add(u.getNick());
-        }
-        return userOnlineList;
-    }
-    public ResponseHelper listProject(String nick){
-        ResponseHelper response=new ResponseHelper();
-        List<String> list=new ArrayList<>();
-        if(nick.isEmpty()){
-            response.setResponse("Empty field");
-            return response;
-        }
-        for (Project p : projects){
-            if(p.isMember(nick)) list.add(p.getProjectID());
-        }
-
-        if(list.isEmpty()) response.setResponse("User's project list is empty");
-        else{
-            response.setList(list);
-            response.setResponse("OK");
-        }
-        return response;
 
     }
     public String createProject(String projectName,String nick){
@@ -400,8 +334,8 @@ public class Server extends RemoteObject implements ServerRMI {
         }
         return "User not found";
     }
-    public ResponseHelper showMembers(String projectName,String nick){
-        ResponseHelper response=new ResponseHelper();
+    public ResponseHelper<String> showMembers(String projectName,String nick){
+        ResponseHelper<String> response=new ResponseHelper<>();
         if(projectName.isEmpty()||nick.isEmpty()){
             response.setResponse("Empty field");
             return response;
@@ -420,8 +354,8 @@ public class Server extends RemoteObject implements ServerRMI {
         response.setResponse("Project not found");
         return response;
     }
-    public ResponseHelper showCards(String projectName,String nick){
-        ResponseHelper response=new ResponseHelper();
+    public ResponseHelper<String> showCards(String projectName,String nick){
+        ResponseHelper<String> response=new ResponseHelper<>();
         if(projectName.isEmpty()||nick.isEmpty()){
             response.setResponse("Empty field");
             return response;
@@ -440,8 +374,8 @@ public class Server extends RemoteObject implements ServerRMI {
         response.setResponse("Project not found");
         return response;
     }
-    public ResponseHelper showCard(String projectName,String cardName,String nick){
-        ResponseHelper response=new ResponseHelper();
+    public ResponseHelper<String> showCard(String projectName,String cardName,String nick){
+        ResponseHelper<String> response=new ResponseHelper<>();
         if(projectName.isEmpty()||nick.isEmpty()||cardName.isEmpty()){
             response.setResponse("Empty field");
             return response;
@@ -502,8 +436,8 @@ public class Server extends RemoteObject implements ServerRMI {
             }
             return "Project not found";
     }
-    public ResponseHelper getCardHistory(String projectName,String cardName,String nick){
-        ResponseHelper response=new ResponseHelper();
+    public ResponseHelper<String> getCardHistory(String projectName,String cardName,String nick){
+        ResponseHelper<String> response=new ResponseHelper<>();
         if(projectName.isEmpty()||cardName.isEmpty()||nick.isEmpty()){
             response.setResponse("Empty field");
             return response;
@@ -531,9 +465,10 @@ public class Server extends RemoteObject implements ServerRMI {
                 if(!p.canDelete()) return "Can't delete project: all the cards have to be in TODO list";
                 try{
                     p.deleteProject();
-                    projects.remove(p);
                     mapper.writeValue(projectJSON,projects);
                     updateremoveChat(new Chat(p.getProjectID(),p.getChatAddress(),p.getPort()));
+                    projects.remove(p);
+                    System.out.println("Project " + projectName + " removed");
                     return "Project canceled";
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -569,6 +504,7 @@ public class Server extends RemoteObject implements ServerRMI {
         Project p=null;
         for(Project tmp : projects){
             if(chat.getProjectName().equalsIgnoreCase(tmp.getProjectID())){
+                System.out.println("SONO QUIII GUARDAMI");
                 p=tmp;
                 break;
             }
@@ -576,6 +512,7 @@ public class Server extends RemoteObject implements ServerRMI {
         if(p!=null) {
             for (Notify stub : clientStubs.keySet()) {
                 if (p.isMember(clientStubs.get(stub))) stub.notifyProjectCancel(chat);
+                System.out.println("Callbacks remove project done");
             }
         }
     }
@@ -592,7 +529,7 @@ public class Server extends RemoteObject implements ServerRMI {
         System.out.println("Callbacks done");
     }
     public static void main(String []args){
-        Server server = new Server();
+        ServerMain server = new ServerMain();
         try{
             ServerRMI stub = (ServerRMI) UnicastRemoteObject.exportObject(server,0);
             LocateRegistry.createRegistry(2021);
@@ -603,5 +540,4 @@ public class Server extends RemoteObject implements ServerRMI {
             e.printStackTrace();
         }
     }
-    //TODO: READCHAT E WRITECHAT NEL CLIENT. CON LE CALLBACK INVIO UN OGGETTO CONTENENTE INDIRIZZO CHAT E RELATIVO PROGETTO. IL CLIENT TIENE
 }

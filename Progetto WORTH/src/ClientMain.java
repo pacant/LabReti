@@ -1,11 +1,7 @@
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import javax.xml.crypto.Data;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -17,8 +13,8 @@ import java.rmi.server.RemoteObject;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 
-public class Client extends RemoteObject implements Notify {
-    private static final long serialVersionUID = 1L; // per versione compatibile serializzazione
+public class ClientMain extends RemoteObject implements Notify {
+    private static final long serialVersionUID = 1L;
     private List<Chat> chats; // lista che identifica le chat dei progetti
     private String serverAddress = "localhost";
     private String userName;
@@ -28,7 +24,7 @@ public class Client extends RemoteObject implements Notify {
     private boolean loggedIn;
     private ObjectMapper objectMapper;
 
-    public Client() {
+    public ClientMain() {
         super();
         chats = new ArrayList<>();
 
@@ -44,7 +40,7 @@ public class Client extends RemoteObject implements Notify {
             Registry r = LocateRegistry.getRegistry(2021);
             ServerRMI stub = (ServerRMI) r.lookup("WorthServer"); // stub del server
 
-            Client client = this;
+            ClientMain client = this;
             Notify clientStub = (Notify) UnicastRemoteObject.exportObject(client, 0); // stub da mandare al server tramite registerCB
 
             socket = SocketChannel.open();
@@ -76,7 +72,7 @@ public class Client extends RemoteObject implements Notify {
                             userName = command[1];
                             System.out.println("Logged in");
                             loggedIn = true;
-                            stub.registerCB(clientStub, userName);
+                            userList=stub.registerCB(clientStub, userName);
                         }
                         break;
                     case "logout":
@@ -87,29 +83,25 @@ public class Client extends RemoteObject implements Notify {
                             loggedIn = false;
                             stub.unregisterCB(clientStub, userName);
                         }
-
                         break;
                     case "listusers":
                         if (command.length != 1) System.out.println("Wrong arguments");
                         else if (!loggedIn) System.out.println("You aren't logged in");
-                        else if (listUsers(input, socket)) {
-                            Utils.printUserList(userList);
-                        }
+                        else printUserList(userList);
                         break;
                     case "listonlineusers":
                         if (command.length != 1) System.out.println("Wrong arguments");
                         else if (!loggedIn) System.out.println("You aren't logged in");
-                        else {
-                            System.out.println("Online users list: ");
-                            receiveList(input, socket);
-                        }
+                        else printOnlineUserList(userList);
                         break;
                     case "listprojects":
                         if (command.length != 1) System.out.println("Wrong arguments");
                         else if (!loggedIn) System.out.println("You aren't logged in");
-                        else {
+                       else {
                             System.out.println("Project list: ");
-                            receiveList(input, socket);
+                            for (Chat c : chats) {
+                                System.out.println(c.getProjectName());
+                            }
                         }
                         break;
                     case "createproject":
@@ -127,7 +119,7 @@ public class Client extends RemoteObject implements Notify {
                         if (command.length != 2) System.out.println("Wrong arguments");
                         else if (!loggedIn) System.out.println("You aren't logged in");
                         else {
-                            System.out.println("Member list: ");
+                            System.out.println("Members list: ");
                             receiveList(input, socket);
                         }
                         break;
@@ -139,14 +131,14 @@ public class Client extends RemoteObject implements Notify {
                             receiveList(input, socket);
                         }
                         break;
-                    case "cmds":
+                    case "help":
                         printCMDS();
                         break;
                     case "showcard":
                         if (command.length != 3) System.out.println("Wrong arguments");
                         else if (!loggedIn) System.out.println("You aren't logged in");
                         else {
-                            System.out.println("Information about card " + command[1] + " of project" + command[2] + ": ");
+                            System.out.println("Information about card " + command[2] + " of project " + command[1] + ": ");
                             receiveList(input, socket);
                         }
                         break;
@@ -204,7 +196,7 @@ public class Client extends RemoteObject implements Notify {
     }
 
     public boolean login(String input, SocketChannel socket) {
-        ResponseHelper response;
+        ResponseHelper<Chat> response;
         String aux;
         ByteBuffer receive = ByteBuffer.allocate(1024);
         try {
@@ -212,10 +204,10 @@ public class Client extends RemoteObject implements Notify {
 
             socket.read(receive);
             aux=new String(receive.array()).trim();
-            response=objectMapper.readValue(aux,ResponseHelper.class);
+            response=objectMapper.readValue(aux, new TypeReference<ResponseHelper<Chat>>() {});
             if (response.getResponse().equalsIgnoreCase("ok")) {
-                if(response.getChatAddress()!=null){
-                    chats = response.getChatAddress(); // ottengo gli indirizzi delle chat dei progetti di cui sono membro. Dopo il login i successivi mi arriveranno via callbacks
+                if(response.getList()!=null){
+                    chats = response.getList(); // ottengo gli indirizzi delle chat dei progetti di cui sono membro. Dopo il login i successivi mi arriveranno via callbacks
                     joinGroups();
                 }
                 return true;
@@ -228,7 +220,7 @@ public class Client extends RemoteObject implements Notify {
     }
 
     public boolean logout(String input, SocketChannel socket) {
-        ResponseHelper response;
+        ResponseHelper<String> response;
         String aux;
 
         ByteBuffer receive = ByteBuffer.allocate(1024);
@@ -237,8 +229,7 @@ public class Client extends RemoteObject implements Notify {
 
             socket.read(receive);
             aux = new String(receive.array()).trim();
-            response=objectMapper.readValue(aux, ResponseHelper.class);
-
+            response=objectMapper.readValue(aux, new TypeReference<ResponseHelper<String>>() {});
             if (response.getResponse().equalsIgnoreCase("ok")) return true;
             System.out.println(response.getResponse());
         } catch (IOException e) {
@@ -247,37 +238,15 @@ public class Client extends RemoteObject implements Notify {
 
         return false;
     }
-
-    public boolean listUsers(String input, SocketChannel socket) {
-        ResponseHelper response;
-        String aux;
-        ByteBuffer receive = ByteBuffer.allocate(1024);
-        try {
-            socket.write(ByteBuffer.wrap(input.getBytes()));
-            socket.read(receive);
-            aux=new String(receive.array()).trim();
-            response=objectMapper.readValue(aux, ResponseHelper.class);
-
-            if (response.getResponse().equalsIgnoreCase("ok")) {
-                userList = response.getUserListStatus();
-                return true;
-            }
-            System.out.println(response.getResponse());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-
     public void receiveList(String input, SocketChannel socket) { // metodo unico per ricevere liste di stringhe, per i metodi listproject listonlineuser showmember showcard e showcards
         ByteBuffer receive = ByteBuffer.allocate(1024);
         String aux;
-        ResponseHelper response;
+        ResponseHelper<String> response;
         try {
             socket.write(ByteBuffer.wrap(input.getBytes()));
             socket.read(receive);
             aux=new String(receive.array()).trim();
-            response=objectMapper.readValue(aux, ResponseHelper.class);
+            response=objectMapper.readValue(aux, new TypeReference<ResponseHelper<String>>() {});
             if (response.getResponse().equalsIgnoreCase("ok")) {
                 if(response.getList()==null) System.out.println("Lista nulla");
                 Utils.printList(response.getList());
@@ -289,13 +258,14 @@ public class Client extends RemoteObject implements Notify {
 
     public void receiveString(String input, SocketChannel socket) { // metodo unico per ricevere una stringa, per addmember createproject addcard e movecard
         ByteBuffer receive = ByteBuffer.allocate(1024);
-        ResponseHelper response;
+        ResponseHelper<String> response;
         String aux;
         try {
             socket.write(ByteBuffer.wrap(input.getBytes()));
             socket.read(receive);
             aux=new String(receive.array()).trim();
-            response=objectMapper.readValue(aux, ResponseHelper.class);
+            response=objectMapper.readValue(aux, new TypeReference<ResponseHelper<String>>() {
+            });
             System.out.println(response.getResponse());
         } catch (IOException e) {
             e.printStackTrace();
@@ -318,12 +288,12 @@ public class Client extends RemoteObject implements Notify {
     public void readChat(String projectname) throws IOException{
         if(projectname.isEmpty()) System.out.println("Empty field");
         DatagramPacket packet;
-        byte[] buff=new byte[8192];
         for(Chat c : chats){
             if(c.getProjectName().equalsIgnoreCase(projectname)){
                 System.out.println("--------");
                 while(true){
                     try {
+                        byte[] buff=new byte[4096];
                         packet = new DatagramPacket(buff, buff.length);
                         c.getSocket().receive(packet);
                         System.out.println(new String(packet.getData()));
@@ -335,6 +305,7 @@ public class Client extends RemoteObject implements Notify {
             }
         }
     }
+    // prende solo projectName come parametro, successivamente può mandare in input il messaggio
     public void sendChatMsg(String projectname){
         Scanner scanner= new Scanner(System.in);
         System.out.println("Type a message");
@@ -348,6 +319,7 @@ public class Client extends RemoteObject implements Notify {
                 try{
                         packet=new DatagramPacket(buff,buff.length,InetAddress.getByName(c.getAddress()),c.getPort());
                         c.getSocket().send(packet);
+                        System.out.println("Message sent");
                 } catch (UnknownHostException e) {
                     e.printStackTrace();
                 } catch (IOException e) {
@@ -390,10 +362,14 @@ public class Client extends RemoteObject implements Notify {
     public void notifyProjectCancel(Chat chat) throws RemoteException {
         MulticastSocket multicastSocket = null;
         boolean found = false;
-        for (Chat c : chats) {
+        Chat c;
+        Iterator<Chat> it = chats.iterator();
+        while (it.hasNext()) {
+            c=it.next();
             if (c.getAddress().equalsIgnoreCase(chat.getAddress())) {
                 multicastSocket = c.getSocket();
                 found = true;
+                it.remove();
             }
         }
         if(!found) return;
@@ -407,7 +383,7 @@ public class Client extends RemoteObject implements Notify {
         }
     }
     public void printCMDS(){
-        System.out.println("Lista dei comandi:");
+        System.out.println("Command list:");
         System.out.println("- register 'username' 'password' ");
         System.out.println("- login 'username' 'password' ");
         System.out.println("- logout 'username'");
@@ -419,18 +395,31 @@ public class Client extends RemoteObject implements Notify {
         System.out.println("- showMembers 'projectName'");
         System.out.println("- showcards 'projectName'");
         System.out.println("- showcard 'projectName' 'cardName'");
-        System.out.println("- moveCard 'projectName' 'cardName' 'description'");
+        System.out.println("- addCard 'projectName' 'cardName' 'description'");
         System.out.println("- moveCard 'projectName' 'cardName' 'startList' 'destinationList'");
         System.out.println("- getCardHistory 'projectName' 'cardName'");
         System.out.println("- readChat 'projectName'");
         System.out.println("- sendChatMsg 'projectName");
         System.out.println("- cancelProject 'projectName");
-        System.out.println("- cmds");
+        System.out.println("- help"); // lista dei possibili comandi
+        System.out.println("- quit");
         System.out.println("------------------------------");
-        System.out.println("Inserisci comando:");
+        System.out.println("Insert command:");
+    }
+    public static void printUserList(Map<String,Boolean> userList){
+        for(String u : userList.keySet()){
+            System.out.print("- " + u);
+            if(userList.get(u)) System.out.println(" - online");
+            else System.out.println(" - offline");
+        }
+    }
+    public static void printOnlineUserList(Map<String,Boolean> userList) {
+        for (String u : userList.keySet()) {
+            if (userList.get(u)) System.out.println("- " + u);
+        }
     }
     public static void main(String[] args){
-        Client client= new Client();
+        ClientMain client= new ClientMain();
         client.startClient();
         System.exit(1);
     }
