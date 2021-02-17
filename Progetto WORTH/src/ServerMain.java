@@ -504,7 +504,6 @@ public class ServerMain extends RemoteObject implements ServerRMI {
         Project p=null;
         for(Project tmp : projects){
             if(chat.getProjectName().equalsIgnoreCase(tmp.getProjectID())){
-                System.out.println("SONO QUIII GUARDAMI");
                 p=tmp;
                 break;
             }
@@ -528,7 +527,7 @@ public class ServerMain extends RemoteObject implements ServerRMI {
         }
         System.out.println("Callbacks done");
     }
-    public static void main(String []args){
+    public static void main(String [] args){
         ServerMain server = new ServerMain();
         try{
             ServerRMI stub = (ServerRMI) UnicastRemoteObject.exportObject(server,0);
